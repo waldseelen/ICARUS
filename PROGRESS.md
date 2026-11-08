@@ -1,16 +1,26 @@
 # PROGRESS.md — Gate Status & Session History
 
-## Current Gate Status (2026-11-01)
+## Current Gate Status (2026-11-08)
 
-- `python3 -m unittest discover tests`: **PASS** exit 0, 42 tests, 0 errors (live write skipped safely)
-- `python3 -m unittest tests/test_e2e_mock.py`: **PASS** exit 0, 9 tests, 0 errors
-- `python3 -m unittest tests/test_hardware_live.py`: **PASS** exit 0, 6 tests, 0 errors (hardware write isolated)
-- `python3 -m unittest tests/test_scroll.py`: **PASS** exit 0, 2 tests, 0 errors (touchpad isolation verified)
-- `python3 -m unittest tests/test_buttons.py`: **PASS** exit 0, 5 tests, 0 errors (multimedia, system, multiclick, special)
-- `python3 -m unittest tests/test_config.py`: **PASS** exit 0, 6 tests, 0 errors (sensor calibration preserved & verified)
-- `wc -l /home/hp/Work/MOUSE/icarusctl/icarus/*.py`: **PASS** all 13 modules strictly <= 400 lines (commands.py: 397, gui.py: 394, buttons.py: 319, config.py: 311, gui_macros.py: 279)
-- `~/.local/bin/icarus info`: **PASS** exit 0, hardware queried cleanly, active profile = 1 (1000 Hz, High LOD 3mm)
-- `scripts/build-dist.sh`: **PASS** exit 0, zipapp (1.7MB), deb (1.1MB), and tarball (1.1MB) generated successfully
+- `node` 8051 firmware disassembly & 64 KB ROM extraction (`firmware_backup/isp_dump_fixed.bin`): **PASS** (Bootloader MD5 `571ea8b315654c39046e4cc3b1e43777` verified)
+- Live PMW3325 SPI `dir_0x43 == 0x0B` verification (`p2_b1` `b11 = 0x38` retention across `0x420C -> 0x4A2E` boot check): **PASS** (`BLK_21: 04-21-00-00-00-00-06-00-00-0B-02-38...`)
+- USB enumeration after ISP Page 0 reset vector offset (`0x0000: 02 FE FE` loop): **BLOCKED** (Requires 4-pin hardware ICP/JTAG flash of `firmware_backup/firmware_patched_60k.bin` or `firmware_backup/isp_dump_fixed.bin`)
+
+## 2026-11-08 — Full 64 KB SH68F89 Flash Extraction, Dual-Sensor Root Cause Proof & ISP Reset Vector Post-Mortem
+
+- **Değişen alanlar (`path›symbol`)**:
+  - `FARE.md`: Documented complete 64 KB SH68F89 flash map (`0x0000..0xFFFF`), XRAM shadow layout (`0x0000..0x0547`), full 8051 call graph (`0x2E34 -> 0x3943`), dual-sensor architecture (PixArt PMW3325 on 3-wire SPI `P2.4/P2.3/P2.1` + bottom LOD proximity sensor on I2C `P1.6/P1.7` and lift-off pin `P1.5`), ISP read/write asymmetry post-mortem, and 4-pin ICP/JTAG recovery guide.
+  - `firmware_backup/`: Saved permanent copies of `isp_dump_fixed.bin` (exact 64 KB factory ROM), `isp_dump.bin` (raw 64 KB ISP read), `firmware_original_60k.bin` (original 60 KB firmware), `firmware_patched_60k.bin` (patched 60 KB firmware for ICP/JTAG with `0x473F: d2 3b 00`, `0x4760: 80 0e 00`, `0xEFFB: 02 2e 34`), `firmware_patched_60k_isp.bin` (`+0x5A` encoded across all 2048 bytes per page for USB ISP), `sinowisp.exe`, and all PowerShell scripts (`scripts/`).
+  - `setup/`: Extracted full Windows vendor installer (`OemDrv.exe`, `Lowerdev.dll`, `MenuEx.dll`, `InitSetup.dll`, `Cfg.ini`, `text.xml`, `oemdrv.asm`, `skins/`, `localappdata/`).
+  - `ARCHITECTURE.md`, `SPEC.md`, `MEMORY.md`: Updated hardware topology to Sinowealth SH68F89 (64 KB), documented Opcode `0x75` (ISP entry), dual-sensor architecture, ISP read/write first-6-byte asymmetry trap, and Turkish locale `.ToLowerInvariant()` rule.
+
+- **Kanıt**:
+  - `isp_dump.ps1`: Read all 32 pages (65,536 bytes) in ISP mode (`VID_0603&PID_1021`); subtracting `0x5E` from bytes `6..2047` of each `0x800` page yielded bootloader MD5 `571ea8b315654c39046e4cc3b1e43777` (SH68F89).
+  - `p2_b1` `b11 = 0x38` hardware boot test: Wrote `b8 = 0x00, b11 = 0x38` with magic `0x7B`; after full USB power cycle (`0x3943 -> 0x4FE3 -> 0x420C -> 0x4A2E`), readback returned `04-21-00-00-00-00-06-00-00-0B-02-38-00-04-07-09`, proving `0x4A2E` took the `dir_0x43 == 0x0B` branch (PMW3325 SPI `Product_ID == 0x43` is healthy) and isolating `dx/dy == 0` to the `0x4760` (`JNB bit_0x95, 0x4770` / `JNB bit_0x3a, 0x4770`) bottom LOD sensor gate.
+  - `isp_flash_patch.ps1` verification output: All bytes `6..2047` across all 30 pages (`0x0000..0xEFFF`, including patches at `0x473F` and `0x4760`) verified with `0` mismatches; bytes `0..5` of each page had `0x5A` subtracted by bootloader write routine `0xF380..0xF400`, writing `02 FE FE` (`LJMP 0xFEFE`, where `0xFEFE = 0x22 RET`) at `0x0000..0x0002`.
+
+- **Kalan boşluk**:
+  - Hardware 4-pin ICP/JTAG flash required using an Arduino / ESP32 / RP2040 (`sinowealth-8051-dumper` / `sh-flasher`) to write `firmware_backup/firmware_patched_60k.bin` (or `firmware_backup/isp_dump_fixed.bin`) directly to the SH68F89 MCU and restore the `0x0000: 02 2E 34` reset vector.
 
 ## 2026-11-01 — REA Disassembly, Active Profile 1 Switching & Factory Block Restoration
 

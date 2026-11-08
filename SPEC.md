@@ -2,11 +2,12 @@
 
 ## 1. Hardware Identifiers & USB Topology
 
-- **Vendor ID (VID):** `0x258A`
-- **Product ID (PID):** `0x0027`
-- **Microcontroller:** Sinowealth 8051-core HID MCU (SH68F83 / BY8832 firmware)
-- **Optical Sensor:** PixArt PMW3325DB-TWV1 (Sensor ID `0x3325`, internal ID mask `0x0B`)
-- **Firmware ID (PSD):** `0x56 0x39 0x30 0x31` (ASCII "V901", checked at `0x412b5c`)
+- **Vendor ID (VID):** `0x258A` (Normal Mode) / `0x0603` (Sinowealth ISP Mode)
+- **Product ID (PID):** `0x0027` (Normal Mode) / `0x1021` (Sinowealth ISP Mode)
+- **Microcontroller:** Sinowealth **SH68F89** 8051-core HID MCU (64 KB Flash, 4 KB ISP Bootloader at `0xF000..0xFFFF` with MD5 `571ea8b315654c39046e4cc3b1e43777`, 2 KB page size / 1 KB sector erase)
+- **Primary Optical Sensor:** PixArt PMW3325DB-TWV1 (SPI `Product_ID` `0x43`, internal MCU sensor ID `dir_0x43 = 0x0B`, 3-wire SPI on `P2.4` NCS, `P2.3` SCLK, `P2.1` SDIO)
+- **Secondary Proximity / LOD Sensor:** Dedicated bottom Lift-Off Distance sensor on I2C (`P1.6` SCL, `P1.7` SDA, address `0x20`/`0x21`, Chip ID `reg[0x00] = 0x63`) + digital lift-off pin `P1.5` (`bit_0x95`)
+- **Firmware ID (PSD):** `0x56 0x39 0x30 0x31` (ASCII `"V901"` at flash offset `0x4DE5`, checked at `OemDrv.exe @ 0x412b5c`)
 
 ### USB HID Endpoints & Interfaces
 
@@ -76,6 +77,7 @@ Replies are retrieved via `HIDIOCGFEATURE(6)`:
 | `0x22` | `00 00 00 00` | `0x004137c9` | **Arm Read P2 Buttons**: Stage Profile 2 Button Block for Report 0x04 | MCU prepares 520B buffer |
 | `0x31` | `00 00 00 00` | `0x00413656` | **Arm Read P3 Config**: Defined in firmware; triggers USB STALL on 2-profile Icarus hardware | USB STALL (`EPIPE`) |
 | `0x32` | `00 00 00 00` | `0x004137d5` | **Arm Read P3 Buttons**: Defined in firmware; triggers USB STALL on 2-profile Icarus hardware | USB STALL (`EPIPE`) |
+| `0x75` | `00 00 00 00` | MCU `0x1BD0` | **Enter ISP Bootloader**: Calls `0x50FA` (`MOV B,#0xA5; MOV A,#0xEA; LJMP 0xFF00`) | Device re-enumerates as `0603:1021` |
 
 ---
 

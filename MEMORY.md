@@ -49,3 +49,19 @@
 - Global mouse wheel settings in Wayland compositors can inadvertently accelerate laptop touchpads to uncontrollable speeds.
 - In Hyprland, scroll scaling must be applied strictly via per-device configuration targeting `sinowealth-wired-gaming-mouse`.
 - Configuration files (`~/.config/hypr/input.lua`) must never touch `input.touchpad = { scroll_factor = ... }`.
+
+## 9. Sinowealth SH68F89 ISP Bootloader Read/Write Asymmetry Trap
+
+- In ISP mode (`VID_0603&PID_1021`), reading a 2048-byte page via `0x52` + `GetFeature(0x06)` (`0x72` at `0xF093..0xF175`) returns bytes `0..5` raw and adds `+0x5E` (`0xFD79`) to bytes `6..2047`.
+- **Trap:** Writing a page via `0x57` + `SetFeature(0x06)` (`0x77` at `0xF36B..0xF4D0`) subtracts `0x5A` (`ADD A, #0xA6`) from **bytes `0..5` as well** (`0xF380..0xF3FF` and `0xFDD3`). Leaving bytes `0..5` unencoded on Page 0 (`0x0000`) corrupts the reset vector (`0x0001..0x0002` becomes `FE FE` instead of `2E 34`, jumping to `0xFEFE: 22` `RET` and looping forever before USB initializes).
+- **Rule:** For USB ISP writes (`0x77`), all 2048 bytes of each page must have `+0x5A` added (`firmware_patched_60k_isp.bin`). For direct hardware ICP/JTAG programming, use the unencoded binary (`firmware_patched_60k.bin` or `isp_dump_fixed.bin`).
+
+## 10. Dual-Sensor Architecture & LOD `P1.5` Motion Gate (`0x4760`)
+
+- The mouse contains both a PixArt PMW3325 main optical sensor (3-wire SPI on `P2.4/P2.3/P2.1`, invisible 850nm IR LED) and a separate bottom Lift-Off Distance (LOD) proximity sensor (I2C `0x20`/`0x21` on `P1.6/P1.7` + digital output on `P1.5` / `bit_0x95`, visible 3 Hz blinking LED).
+- At `0x4760..0x476F`, if `P1.5 == 1` (`bit_0x95`) and `bit_0x3a == 1`, the firmware zeroes `dir_0x4b..0x4e` (`dx/dy`) on every poll even when the PMW3325 sensor is healthy (`dir_0x43 == 0x0B`).
+
+## 11. Windows Turkish Locale `ToLower()` Trap in HID Paths
+
+- In PowerShell under a Turkish locale (`tr-TR`), calling `.ToLower()` on `"HID\VID_258A..."` converts uppercase `'I'` to dotless `'ı'` (`U+0131`), causing `CreateFile` to fail with `ERROR_FILE_NOT_FOUND (2)`.
+- **Rule:** Always use `.ToLowerInvariant()` when constructing Win32 device interface paths.

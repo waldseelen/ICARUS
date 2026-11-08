@@ -11,6 +11,10 @@ icarusctl/
 ├── MEMORY.md              # Hardware quirks and non-obvious traps
 ├── PROGRESS.md            # Test gate status and session verification log
 ├── README.md              # CLI orientation and usage guide
+├── FARE.md                # Full 8051 firmware disassembly map, dual-sensor architecture & ICP recovery
+├── Gamepower ICARUS Software Setup.exe # Original Windows installer binary
+├── setup/                 # Extracted Windows vendor application (OemDrv.exe, Lowerdev.dll, Cfg.ini, etc.)
+├── firmware_backup/       # Full 64KB MCU flash dumps, patched 60KB images, sinowisp.exe & PowerShell scripts
 ├── pyproject.toml         # Packaging metadata
 ├── bin/
 │   └── icarusctl          # In-tree development CLI launcher
@@ -79,24 +83,25 @@ The Gamepower Icarus (USB VID:PID `258A:0027`) exposes two distinct USB HID inte
                                              |
 +--------------------------------------------v--------------------------------------------+
 |                              Sinowealth 8051-Core MCU                                   |
-|                             (SH68F83 / BY8832 Firmware)                                 |
+|                        (SH68F89 — 64 KB Flash, V901 Firmware)                           |
 |                                                                                         |
-|  [GPIO Matrix]                                 [Internal Flash Memory]                  |
-|  • Physical microswitches (K1..K9)              • Profile 1 Config Block 1 (Cmd 0x11)   |
-|  • Rotary optical encoder (Wheel)              • Profile 1 Button Block 2 (Cmd 0x12)   |
-|                                                • Profile 2 Config Block 1 (Cmd 0x21)   |
-|                                                • Profile 2 Button Block 2 (Cmd 0x22)   |
-|                                                • Macro Storage Blocks (Cmd 0x30)       |
+|  [GPIO Matrix]                                 [Internal 64 KB Flash Memory]            |
+|  • Physical microswitches (K1..K9)              • 0x0000..0x5132: 8051 Main Firmware    |
+|  • Rotary optical encoder (Wheel)              • 0x8000 / 0x8100: P1/P2 Button Blocks  |
+|  • I2C LOD Sensor (P1.6/P1.7, addr 0x20/0x21)   • 0x8400 / 0x8500: P1/P2 Config Blocks  |
+|  • LOD Lift-Off Pin (P1.5 / bit_0x95)          • 0x8800: Active Profile (0x01 / 0x02)  |
+|                                                • 0x9800..0xAC00: 5 Onboard Macro Slots |
+|                                                • 0xF000..0xFFFF: ISP Bootloader (4 KB) |
 +-----------------------------------------------------------------------------------------+
                                              |
-                              Internal 4-Wire SPI Bus + MOTION_INT
-                              (NCS, SCLK, SDIO/MOSI, MISO, MOTION_INT)
+                              Internal 3-Wire Bit-Banged SPI Bus
+                           (P2.4 NCS, P2.3 SCLK, P2.1 SDIO via P2M1)
                                              |
 +--------------------------------------------v--------------------------------------------+
 |                          PixArt PMW3325DB-TWV1 Optical Engine                           |
 |  • Native Resolution: 200 - 5000 DPI (Interpolated up to 10000 DPI)                     |
-|  • Internal State Machine: Run -> Rest1 -> Rest2 -> Rest3 (Pulsing 3-4 Hz LED)          |
-|  • Registers: Shutter Threshold, LiftCutoff_Tune0 (0x6A), Run Calibration               |
+|  • Product_ID (reg 0x00) = 0x43 -> sets internal MCU sensor ID dir_0x43 = 0x0B          |
+|  • Initialized via 29-register table at 0x3895..0x38CE (routine 0x3D16)                 |
 +-----------------------------------------------------------------------------------------+
 ```
 
