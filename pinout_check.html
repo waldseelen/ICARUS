@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>CON6 ↔ Arduino Bağlantı Doğrulama</title>
+<style>
+  * { box-sizing: border-box; font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
+  body { background: #0f172a; color: #e2e8f0; margin: 0; padding: 24px; display: flex; flex-direction: column; align-items: center; }
+  .card { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 24px; max-width: 960px; width: 100%; box-shadow: 0 12px 32px rgba(0,0,0,0.4); }
+  h1 { margin: 0 0 6px; font-size: 20px; color: #38bdf8; }
+  p.sub { margin: 0 0 20px; color: #94a3b8; font-size: 13px; }
+  .con6-box { background: #0b1120; border: 2px solid #475569; border-radius: 12px; padding: 20px; margin-bottom: 20px; text-align: center; }
+  .silk { display: inline-block; background: #334155; color: #f8fafc; font-weight: 700; letter-spacing: 2px; padding: 4px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
+  .pins { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+  .pin-col { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 12px 8px; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .pin-col.match { border-color: #22c55e; }
+  .pin-col.mismatch { border-color: #f59e0b; }
+  .pad { width: 34px; height: 48px; background: linear-gradient(180deg, #cbd5e1, #64748b); border-radius: 6px; border: 2px solid #94a3b8; display: flex; align-items: center; justify-content: center; color: #0f172a; font-weight: 800; font-size: 15px; }
+  .pin-title { font-weight: 700; font-size: 14px; color: #f8fafc; }
+  .expected { font-size: 11px; color: #94a3b8; }
+  select, input[type="text"] { width: 100%; background: #0f172a; color: #f1f5f9; border: 1px solid #475569; border-radius: 6px; padding: 6px 8px; font-size: 12px; }
+  select:focus, input:focus { outline: none; border-color: #38bdf8; }
+  .actions { display: flex; gap: 12px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  button { background: #0284c7; color: #fff; border: none; border-radius: 8px; padding: 10px 18px; font-weight: 600; cursor: pointer; font-size: 14px; }
+  button:hover { background: #0369a1; }
+  button.sec { background: #334155; }
+  button.sec:hover { background: #475569; }
+  textarea { width: 100%; height: 140px; margin-top: 14px; background: #0b1120; color: #a5f3fc; border: 1px solid #334155; border-radius: 8px; padding: 12px; font-family: Consolas, monospace; font-size: 13px; resize: vertical; }
+  .status { font-size: 13px; color: #4ade80; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Gamepower Icarus — CON6 ↔ Arduino Nano Bağlantı Eşleştirici</h1>
+  <p class="sub">PCB üzerindeki <strong>CON6</strong> yazısı aşağıda düz okunur durumdayken soldan sağa (Pin 1 → Pin 6) kendi yaptığın bağlantıları seç veya altına yaz.</p>
+
+  <div class="con6-box">
+    <div class="pins" id="pins"></div>
+    <div style="margin-top:14px;"><span class="silk">CON6 (Yazı Düz)</span></div>
+  </div>
+
+  <div class="actions">
+    <button onclick="copySummary()">📋 Özeti Oluştur ve Kopyala</button>
+    <button class="sec" onclick="fillExpected()">Referans Şemayı Doldur</button>
+    <button class="sec" onclick="clearAll()">Temizle</button>
+    <span class="status" id="status"></span>
+  </div>
+
+  <textarea id="output" readonly placeholder="Burada oluşan metni kopyalayıp sohbete yapıştırabilirsin..."></textarea>
+</div>
+
+<script>
+const expected = [
+  { pin: 1, sig: "VDD (3.3V)", ard: "3.3V", res: "Yok" },
+  { pin: 2, sig: "TCK",        ard: "D5",   res: "1kΩ" },
+  { pin: 3, sig: "TDI",        ard: "D4",   res: "1kΩ" },
+  { pin: 4, sig: "TMS",        ard: "D3",   res: "1kΩ" },
+  { pin: 5, sig: "TDO",        ard: "D2",   res: "Yok" },
+  { pin: 6, sig: "GND",        ard: "GND",  res: "Yok" }
+];
+
+const ardOptions = ["Seç...", "3.3V", "5V", "GND", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "Bağlı Değil"];
+const resOptions = ["Yok", "1kΩ", "Diğer"];
+
+const container = document.getElementById("pins");
+
+expected.forEach((item, idx) => {
+  const col = document.createElement("div");
+  col.className = "pin-col";
+  col.id = `col-${item.pin}`;
+  col.innerHTML = `
+    <div class="pad">${item.pin}</div>
+    <div class="pin-title">CON6 Pin ${item.pin}</div>
+    <div class="expected">Beklenen: ${item.sig} (${item.ard})</div>
+    <select id="ard-${item.pin}" onchange="updateOut()">
+      ${ardOptions.map(o => `<option value="${o}">${o}</option>`).join("")}
+    </select>
+    <select id="res-${item.pin}" onchange="updateOut()">
+      ${resOptions.map(o => `<option value="${o}">${o === "Yok" ? "Direnç: Yok" : "Direnç: " + o}</option>`).join("")}
+    </select>
+    <input type="text" id="note-${item.pin}" placeholder="Not / kablo rengi..." oninput="updateOut()">
+  `;
+  container.appendChild(col);
+});
+
+function updateOut() {
+  let lines = ["CON6 <-> Arduino Mevcut Bağlantılarım:"];
+  expected.forEach(item => {
+    const ard = document.getElementById(`ard-${item.pin}`).value;
+    const res = document.getElementById(`res-${item.pin}`).value;
+    const note = document.getElementById(`note-${item.pin}`).value.trim();
+    const col = document.getElementById(`col-${item.pin}`);
+    col.classList.remove("match", "mismatch");
+    if (ard !== "Seç...") {
+      if (ard === item.ard && res === item.res) col.classList.add("match");
+      else col.classList.add("mismatch");
+    }
+    let line = `- Pin ${item.pin}: Arduino ${ard} | Direnç: ${res}`;
+    if (note) line += ` | Not: ${note}`;
+    lines.push(line);
+  });
+  document.getElementById("output").value = lines.join("\n");
+}
+
+function fillExpected() {
+  expected.forEach(item => {
+    document.getElementById(`ard-${item.pin}`).value = item.ard;
+    document.getElementById(`res-${item.pin}`).value = item.res;
+  });
+  updateOut();
+}
+
+function clearAll() {
+  expected.forEach(item => {
+    document.getElementById(`ard-${item.pin}`).value = "Seç...";
+    document.getElementById(`res-${item.pin}`).value = "Yok";
+    document.getElementById(`note-${item.pin}`).value = "";
+  });
+  updateOut();
+}
+
+function copySummary() {
+  updateOut();
+  const text = document.getElementById("output").value;
+  navigator.clipboard.writeText(text).then(() => {
+    const st = document.getElementById("status");
+    st.textContent = "Kopyalandı! Sohbete yapıştırabilirsin.";
+    setTimeout(() => st.textContent = "", 3000);
+  });
+}
+
+updateOut();
+</script>
+</body>
+</html>
