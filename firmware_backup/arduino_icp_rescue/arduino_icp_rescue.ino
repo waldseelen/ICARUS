@@ -154,7 +154,7 @@ bool writeFlash(uint32_t address, const uint8_t* buffer, uint16_t bufferSize) {
   sendData(0x46); sendData(0xF0); sendData(0xFF);
   sendData(ICP_SET_IB_OFFSET_L); sendData(address & 0xFF);
   sendData(ICP_SET_IB_OFFSET_H); sendData((address >> 8) & 0xFF);
-  sendData(ICP_SET_IB_DATA); sendData(buffer[0]);
+  sendData(ICP_SET_IB_DATA); buffer[0];
   sendData(0x6E); sendData(0x15); sendData(0x0A); sendData(0x09); sendData(0x06);
   for (uint16_t n = 1; n < bufferSize; ++n) {
     sendData(buffer[n]); _delay_us(5); sendData(0x00);
